@@ -44,7 +44,7 @@ readonly abstract class GpfServer {
     'pWms'=> [
       'title'=> "pWms",
       'protocol'=> 'WMS',
-      'url'=> 'http://localhost/geoapi/gpf/pwms.php',
+      'url'=> '{geoapiUrl}/gpf/pwms.php',
     ],
     'tms'=> [
       'title'=> "TMS",
@@ -78,6 +78,12 @@ readonly abstract class GpfServer {
     $this->cap = new SimpleXmlElement($cap);
   }
 
+  static function serverUrl(string $server): string {
+    $url = self::SERVERS[$server]['url'];
+    $geoapiUrl = ($_SERVER['HTTP_HOST']=='localhost') ? 'http://localhost/geoapi' : 'https://geoapi.fr';
+    return str_replace('{geoapiUrl}', $geoapiUrl, $url);
+  }
+  
   /** génère l'URL pour connaître les capacités du serveur */
   abstract function getcapUrl(): string;
   
@@ -176,7 +182,7 @@ readonly class WmsLayer extends WxsLayer {
   function leafletCode(): string {
     $title = $this->title();
     $name = $this->name();
-    $url = GpfServer::SERVERS[$this->server]['url'];
+    $url = GpfServer::serverUrl($this->server);
     return <<<EOT
       "$title" : new L.tileLayer.wms('$url',
       { "version":"1.3.0","layers":"$name","format":"image/png","transparent":true,
@@ -189,7 +195,7 @@ EOT;
 /* Serveur WMS */
 readonly class WmsServer extends GpfServer {
   function getcapUrl(): string {
-    return self::SERVERS[$this->server]['url'].'?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetCapabilities';
+    return self::serverUrl($this->server).'?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetCapabilities';
   }
   
   function processCap(string $cap): string { return $cap; }
@@ -242,7 +248,7 @@ readonly class WmtsLayer extends WxsLayer {
   
   /** code JS de Leaflet pour défini la couche */
   function leafletCode(string $styleName=null): string {
-    $url = GpfServer::SERVERS[$this->server]['url'];
+    $url = GpfServer::serverUrl($this->server);
     $title = $this->title();
     $name = $this->name();
     if (!$styleName) {
@@ -256,7 +262,7 @@ readonly class WmtsLayer extends WxsLayer {
     $format = $this->cap->Format;
     $minZoom = $this->minZoom();
     $maxZoom = $this->maxZoom();
-    $url = GpfServer::SERVERS[$this->server]['url']
+    $url = GpfServer::serverUrl($this->server)
       .'?service=WMTS&version=1.0.0&request=GetTile&tilematrixSet=PM&height=256&width=256'
       .'&tilematrix={z}&tilecol={x}&tilerow={y}'
       ."&layer=$name&format=$format&style=$styleName";
@@ -273,7 +279,7 @@ EOT;
 /* Serveur WMTS */
 readonly class WmtsServer extends GpfServer {
   function getcapUrl(): string {
-    return self::SERVERS[$this->server]['url'].'?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetCapabilities';
+    return self::serverUrl($this->server).'?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetCapabilities';
   }
   
   function processCap(string $cap): string {
@@ -297,7 +303,7 @@ readonly class TmsLayer extends WxsLayer {
   
   /* récupère les capacités de la couche et les affiche comme XML */
   function doc(string $htmlHeader): never {
-    $url = TmsServer::SERVERS[$this->server]['url'].'/'.$this->name();
+    $url = TmsServer::serverUrl($this->server).'/'.$this->name();
     //echo "url=$url<br>\n";
     $cap = file_get_contents($url);
     header('Content-Type: text/xml');
@@ -309,7 +315,7 @@ readonly class TmsLayer extends WxsLayer {
     $name = $this->name();
     $ext = $this->cap['extension'];
     //echo "ext=$ext<br>\n";
-    $url = GpfServer::SERVERS[$this->server]['url']."/$name/{z}/{x}/{y}.$ext";
+    $url = TmsServer::serverUrl($this->server)."/$name/{z}/{x}/{y}.$ext";
     //echo "url=$url<br>\n";
     return <<<EOT
       "$title" : new L.tileLayer(
@@ -322,7 +328,7 @@ EOT;
 
 /** Serveur TMS */
 readonly class TmsServer extends GpfServer {
-  function getcapUrl(): string { return self::SERVERS[$this->server]['url']; }
+  function getcapUrl(): string { return self::serverUrl($this->server); }
   
   function layersAsXml(): SimpleXMLElement { return $this->cap->TileMaps->TileMap; }
 };
@@ -383,6 +389,7 @@ switch ($_GET['action'] ?? null) {
     die();
   }
   case 'view': {
+    $geoapiUrl = ($_SERVER['HTTP_HOST']=='localhost') ? 'http://localhost/geoapi' : 'https://geoapi.fr';
     $server = GpfServer::create($_GET['server']);
     $layer = $server->layer($_GET['layer']);
     //print_r($layer);
@@ -416,6 +423,7 @@ var wmtsurl = 'https://data.geopf.fr/wmts?'
             + 'service=WMTS&version=1.0.0&request=GetTile&tilematrixSet=PM&height=256&width=256&'
             + 'tilematrix={z}&tilecol={x}&tilerow={y}';
 var detectRetina = false;
+var geoapiUrl = <?php echo "'$geoapiUrl';\n"; ?>
 var attrIGN = "&copy; <a href='http://www.ign.fr'>IGN</a>";
 var attrINPN = "&copy; <a href='http://inpn.mnhn.fr'>INPN</a>";
 
@@ -425,7 +433,7 @@ var baseLayers = {
      +'&tilematrix={z}&tilecol={x}&tilerow={y}&layer=PLAN-IGN_PNG&format=image/png&style=normal',
     {"format":"image/png","minZoom":0,"maxZoom":19,"detectRetina":false,"attribution":attrIGN}
   ),
-  "Cartes IGN": new L.tileLayer.wms('http://localhost/geoapi/gpf/pwms.php',
+  "Cartes IGN": new L.tileLayer.wms(geoapiUrl+'/gpf/pwms.php',
     { "version":"1.3.0","layers":"cartesIGN","format":"image/png","transparent":true,
       "detectRetina":detectRetina, "attribution":attrIGN }
   ),

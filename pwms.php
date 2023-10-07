@@ -26,8 +26,8 @@ class ProxyWms extends WmsServer {
   function getMap(string $version, array $lyrnames, array $styles, array $bbox, string $crs, int $width, int $height, string $format, string $transparent, string $bgcolor): never {
     switch ($lyrnames[0]) {
       case 'cartesIGN': {
-        $scaleDen = ($bbox[2] - $bbox[0]) / ($width * 0.28 * 1e-3);
-        self::log("scaleDen=$scaleDen");
+        $scaleDen = (intval($bbox[2]) - intval($bbox[0])) / ($width * 0.28 * 1e-3);
+        parent::log("scaleDen=$scaleDen");
         if ($scaleDen > 500_000)
           $layer = 'SCAN1000_PYR-JPEG_WLD_WM';
         elseif ($scaleDen > 150_000)
@@ -58,11 +58,12 @@ class ProxyWms extends WmsServer {
         die ($image);
       }
     }
+    die();
   }
 };
 
 //print_r($_GET); die();
-if (!isset($_GET) || !$_GET) {
+if (!$_GET) {
   echo "<a href='?SERVICE=WMS&REQUEST=GetCapabilities'>GetCap</a><br>";
   $url = 'https://data.geopf.fr/wms-r/wms'; $layer = 'SCAN1000_PYR-JPEG_WLD_WM';
   $url = ''; $layer = 'cartesIGN';

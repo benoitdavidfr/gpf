@@ -5,3 +5,5 @@ et en cliquant sur le titre d'une couche construit une carte Leaflet affichant c
 
 Le script pwms.php est un proxy WMS permettant de définir des couches à partir de celles de la géoplateforme.
 Par exemple, une couches cartesIGN est définie pour visualiser les différentes cartes IGN en fonction de l'échelle.
+
+[Mise en oeuvre dispo ici](http://geoapi.fr/gpf/view.php?action=cap).
