@@ -69,10 +69,10 @@
     </Exception>
     <Layer>
       <Title>Service WMS proxy</Title>
-      <Abstract>Service WMS proxy permettant de définir des couches contruites à partir de couches de la GPF.</Abstract>
+      <Abstract>Service WMS proxy permettant de définir des couches à partir de celles de la GPF.</Abstract>
       <CRS>EPSG:3857</CRS> <!-- Web Mercator -->
-      <CRS>EPSG:4326</CRS> <!-- WGS84 lat,lon -->
-      <CRS>CRS:84</CRS> <!-- WGS84 lon,lat -->
+      <!-- CRS>EPSG:4326</CRS --> <!-- WGS84 lat,lon -->
+      <!-- CRS>CRS:84</CRS --> <!-- WGS84 lon,lat -->
       <EX_GeographicBoundingBox>
         <westBoundLongitude>-180.0</westBoundLongitude>
         <eastBoundLongitude>180.0</eastBoundLongitude>
@@ -87,21 +87,25 @@
       <Style>
         <Name>DEFAUT</Name>
       </Style>
-      <MinScaleDenominator>2000</MinScaleDenominator>
-      <MaxScaleDenominator>40000000</MaxScaleDenominator>
       <Layer queryable="1" opaque="0">
         <Name>cartesIGN</Name>
-        <Title>Cartes IGN</Title>
+        <Title>Cartes IGN en fonction de l'échelle</Title>
         <Abstract>
           Couche utilisant différentes cartes IGN en fonction de l'échelle demandée.
           Voir https://boutique.ign.fr/quelle-carte-ign-choisir
-          Les cartes utilisées sont SCAN1000, ScanRégional (1/250k), ScanDépartemental (1/150k), SCAN100 et SCAN25.
-          Les seuils sont 1/500k, 1/150k, 1/100k et 1/50k.
+          Les cartes utilisées sont:
+            - SCAN1000 du 1/2M au 1/500k (zooms 9 et 10),
+            - ScanRégional (1/250k) du 1/500k au 1/150k (zoom 11),
+            - ScanDépartemental (1/150k) du 1/150k au 1/100k (zoom 12),
+            - SCAN100 du 1/100k au 1/50k (zoom 13) et
+            - SCAN25 du 1/50k au 1/2k (zooms 14 à 18).
         </Abstract>
         <Style>
           <Name>normal</Name>
           <Title>Légende générique</Title>
         </Style>
+        <xMinScaleDenominator>2000</xMinScaleDenominator>
+        <xMaxScaleDenominator>2000000</xMaxScaleDenominator>
       </Layer>
     </Layer>
   </Capability>

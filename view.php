@@ -1,6 +1,33 @@
 <?php
 /** Visualiser avec Leaflet les couches WMS, WMTS et TMS de la géoplateforme */
-$htmlHeader = "<!DOCTYPE HTML><html><head><meta charset='UTF-8'><title>gpf/view</title></head><body>\n";
+require_once __DIR__.'/lib/addusforthousand.inc.php';
+
+/** classe regroupant l'intelligence autour du tuilage et des niveaux de zoom */
+class Zoom {
+  /**
+   * Size0 est la circumférence de la Terre en mètres utilisée dans la projection WebMercator
+   *
+   * correspond à 2 * PI * a où a = 6 378 137.0 est le demi-axe majeur de l'ellipsoide WGS 84
+   * Size0 est le côté du carré contenant les points en coordonnées WebMercator */
+  const Size0 = 20037508.3427892476320267 * 2;
+
+  /** Résolution  standard définie par WMS = 0,28 mm soit 2.8e-4 mètres */
+  const STD_RESOLUTION = 2.8e-4;
+  
+  /** Conversion d'un dénominateur d'échelle en niveau de zoom.
+   *
+   * self::STD_RESOLUTION est la taille d'un pixel sur la carte
+   * ($scaleDen * self::STD_RESOLUTION) donne la taille d'un pixel sur le terrain
+   * ($scaleDen * self::STD_RESOLUTION * 256) donne la taille sur le terrain d'une tuile de largeur 256 pixels
+   */
+  static function zoomFromScaleDen(float $scaleDen): float {
+    return log(Zoom::Size0 / ($scaleDen * self::STD_RESOLUTION * 256), 2);
+  }
+  
+  static function scaleDenFromZoom(float $zoom): float {
+    return Zoom::Size0 / (2 ** $zoom * self::STD_RESOLUTION * 256);
+  }
+};
 
 /** classe abstraite d'un serveur GPF */
 readonly abstract class GpfServer {
@@ -19,7 +46,7 @@ readonly abstract class GpfServer {
       'layerClass'=> 'TmsLayer',
     ],
   ];
-  /** Liste des serveurs de la GPF avec leur URL et la sous-classe sachant les traiter */
+  /** Liste des serveurs avec leur titre, leur protocole et leur URL */
   const SERVERS = [
     'wmts'=> [
       'title'=> "WMTS",
@@ -44,7 +71,7 @@ readonly abstract class GpfServer {
     'pWms'=> [
       'title'=> "pWms",
       'protocol'=> 'WMS',
-      'url'=> '{geoapiUrl}/gpf/pwms.php',
+      'url'=> 'https://geoapi.fr/gpf/pwms.php',
     ],
     'tms'=> [
       'title'=> "TMS",
@@ -57,7 +84,7 @@ readonly abstract class GpfServer {
   /* les capacités comme SimpleXMLElement */
   public SimpleXMLElement $cap;
   
-  /** appelle la création sur la sous-clase adéquate pour le serveur dont l'id est passé en en paramètre */
+  /** appelle la création sur la sous-clase correspondant au serveur avec en paramètre l'id du serveur */
   static function create(string $server): self {
     $protocol = self::SERVERS[$server]['protocol'];
     return new (self::PROTOCOLS[$protocol]['serverClass']) ($server);
@@ -66,25 +93,27 @@ readonly abstract class GpfServer {
   /** crée un serveur, méthode héritée par les sous-classes, prend en paramètre l'id du serveur */
   function __construct(string $server) {
     $this->server = $server;
-    if (is_file(__DIR__."/$server.xml") && (time() - filemtime(__DIR__."/$server.xml") < 12*60*60))
-      $cap = file_get_contents(__DIR__."/$server.xml");
+    if (is_file(__DIR__."/cap/$server.xml") && (time() - filemtime(__DIR__."/cap/$server.xml") < 12*60*60))
+      $cap = file_get_contents(__DIR__."/cap/$server.xml");
     else {
       $getcapUrl = $this->getcapUrl();
       if (($cap = file_get_contents($getcapUrl)) === false)
         die("erreur de lecture de $getcapUrl");
-      file_put_contents(__DIR__."/$server.xml", $cap);
+      file_put_contents(__DIR__."/cap/$server.xml", $cap);
     }
     $cap = $this->processCap($cap);
     $this->cap = new SimpleXmlElement($cap);
   }
 
+  /** Retourne l'url du serveur en substituant geoapi.fr par localhost en local */
   static function serverUrl(string $server): string {
-    $url = self::SERVERS[$server]['url'];
-    $geoapiUrl = ($_SERVER['HTTP_HOST']=='localhost') ? 'http://localhost/geoapi' : 'https://geoapi.fr';
-    return str_replace('{geoapiUrl}', $geoapiUrl, $url);
+    if ($_SERVER['HTTP_HOST']=='localhost')
+      return str_replace('https://geoapi.fr', 'http://localhost/geoapi', self::SERVERS[$server]['url']);
+    else
+      return self::SERVERS[$server]['url'];
   }
   
-  /** génère l'URL pour connaître les capacités du serveur */
+  /** génère l'URL d'interrogation des capacités du serveur */
   abstract function getcapUrl(): string;
   
   /** pré-traitement des capacités en XML avant construction du SimpleXMLElement pour simplifier l'accès.
@@ -136,15 +165,15 @@ readonly abstract class WxsLayer {
   abstract function title(): string;
   
   /** liste des styles de la couche sous la forme [{name} => WxsStyle].
-   * @return array<string,WxsStyle>
+   * @return array<string,?WxsStyle>
    */
   abstract function styles(): array;
 
-  /** affiche une doc */
+  /** affiche une doc de la couche */
   function doc(string $htmlHeader): never { echo $htmlHeader,'<pre>'; print_r($this); die(); }
   
-  /** génération du code JS de définition de la couche dans Leaflet */
-  abstract function leafletCode(): string;
+  /** génère le code JS de définition de la couche dans Leaflet */
+  abstract function leafletCode(string $styleName=null): string;
 };
 
 /** classe abstraite d'un style d'une couche */
@@ -159,13 +188,13 @@ readonly abstract class WxsStyle {
   abstract function title(): string;
 };
 
-/** Style pour une couche WMS */
+/** Style d'une couche WMS */
 readonly class WmsStyle extends WxsStyle {
   function title(): string { return $this->cap->Title; }
 };
 
 /** Couche d'un serveur WMS */
-readonly class WmsLayer extends WxsLayer {  
+readonly class WmsLayer extends WxsLayer {
   function name(): string { return $this->cap->Name; }
 
   function title(): string { return $this->cap->Title; }
@@ -179,15 +208,43 @@ readonly class WmsLayer extends WxsLayer {
     return $styles;
   }
   
-  function leafletCode(): string {
+  private function minZoom(): int {
+    //echo "<pre>cap="; print_r($this->cap);
+    if (!$this->cap->MaxScaleDenominator)
+      return -1;
+    //$minScaleDen = (float)$this->cap->MinScaleDenominator;
+    $maxScaleDen = (float)$this->cap->MaxScaleDenominator;
+    //echo "minScaleDen=$minScaleDen, maxScaleDen=$maxScaleDen\n";
+    //echo "minZoom=",Zoom::zoomFromScaleDen($maxScaleDen),", maxZoom=",Zoom::zoomFromScaleDen($minScaleDen),"\n";
+    return ceil(Zoom::zoomFromScaleDen($maxScaleDen));
+  }
+  
+  function maxZoom(): int {
+    //echo "<pre>cap="; print_r($this->cap);
+    if (!$this->cap->MinScaleDenominator)
+      return -1;
+    $minScaleDen = (float)$this->cap->MinScaleDenominator;
+    //$maxScaleDen = (float)$this->cap->MaxScaleDenominator;
+    //echo "minScaleDen=$minScaleDen, maxScaleDen=$maxScaleDen\n";
+    //echo "minZoom=",Zoom::zoomFromScaleDen($maxScaleDen),", maxZoom=",Zoom::zoomFromScaleDen($minScaleDen),"\n";
+    return floor(Zoom::zoomFromScaleDen($minScaleDen));
+  }
+  
+  function leafletCode(string $styleName=null): string {
     $title = $this->title();
-    $name = $this->name();
     $url = GpfServer::serverUrl($this->server);
+    $layerName = $this->name();
+    $minZoom = $this->minZoom();
+    $maxZoom = $this->maxZoom();
+    if (($minZoom < 0) || ($maxZoom < 0))
+      $zooms = '';
+    else
+      $zooms = sprintf('"minZoom":%d,"maxZoom":%d,', $minZoom, $maxZoom);
     return <<<EOT
-      "$title" : new L.tileLayer.wms('$url',
-      { "version":"1.3.0","layers":"$name","format":"image/png","transparent":true,
-        "detectRetina":detectRetina, "attribution":attrIGN }
-      )
+  "$title" : new L.tileLayer.wms('$url',
+  { "version":"1.3.0","layers":"$layerName","format":"image/png","transparent":true,
+    $zooms"detectRetina":detectRetina, "attribution":attrIGN }
+  )\n
 EOT;
   }
 };
@@ -203,7 +260,7 @@ readonly class WmsServer extends GpfServer {
   function layersAsXml(): SimpleXMLElement { return $this->cap->Capability->Layer->Layer; }
 };
 
-/** Style pour une couche WMTS */
+/** Style d'une couche WMTS */
 readonly class WmtsStyle extends WxsStyle {
   function title(): string { return $this->cap->ows_Title; }
 };
@@ -222,13 +279,13 @@ readonly class WmtsLayer extends WxsLayer {
     return $styles;
   }
   
-  private function tileMatrixSet(): string { return $this->cap->TileMatrixSetLink->TileMatrixSet; }
+  //private function tileMatrixSet(): string { return $this->cap->TileMatrixSetLink->TileMatrixSet; }
   
   private function minZoom(): int {
     $zoom = 9999;
     foreach ($this->cap->TileMatrixSetLink->TileMatrixSetLimits->TileMatrixLimits as $TileMatrixLimit) {
       //echo 'TileMatrix=',$TileMatrixLimit->TileMatrix,"\n";
-      if ($TileMatrixLimit->TileMatrix < $zoom)
+      if ((int)$TileMatrixLimit->TileMatrix < $zoom)
         $zoom = (int)$TileMatrixLimit->TileMatrix;
     }
     //echo "zoom=$zoom\n";
@@ -239,7 +296,7 @@ readonly class WmtsLayer extends WxsLayer {
     $zoom = -1;
     foreach ($this->cap->TileMatrixSetLink->TileMatrixSetLimits->TileMatrixLimits as $TileMatrixLimit) {
       //echo 'TileMatrix=',$TileMatrixLimit->TileMatrix,"\n";
-      if ($TileMatrixLimit->TileMatrix > $zoom)
+      if ((int)$TileMatrixLimit->TileMatrix > $zoom)
         $zoom = (int)$TileMatrixLimit->TileMatrix;
     }
     //echo "zoom=$zoom\n";
@@ -333,10 +390,22 @@ readonly class TmsServer extends GpfServer {
   function layersAsXml(): SimpleXMLElement { return $this->cap->TileMaps->TileMap; }
 };
 
+$htmlHeader = "<!DOCTYPE HTML>\n<html><head><meta charset='UTF-8'><title>gpf/view</title></head><body>\n";
+
 switch ($_GET['action'] ?? null) {
   case null: {
     echo $htmlHeader,
-      "<a href='?action=cap'>afficher la liste des serveurs et leur contenu</a><br>\n";
+      "<a href='?action=cap'>afficher la liste des serveurs et leur contenu</a><br>\n",
+      "<a href='?action=zoomsd'>Correspondance entre zoom et dénominateur d'échelle</a><br>\n";
+    die();
+  }
+  case 'zoomsd': {
+    echo "$htmlHeader<h2>Correspondance entre niveau de zoom et dénominateur d'échelle</h2>\n";
+    echo "<table border=1>";
+    for ($zoom=0; $zoom <= 20; $zoom++) {
+      echo "<tr><td>$zoom</td><td align='right'>",addUndescoreForThousand(round(Zoom::scaleDenFromZoom($zoom))),"</td></tr>\n";
+    }
+    echo "</table>\n";
     die();
   }
   case 'cap': {
@@ -371,8 +440,8 @@ switch ($_GET['action'] ?? null) {
     die();
   }
   case 'clear': {
-    if (is_file(__DIR__."/$_GET[server].xml")) {
-      unlink(__DIR__."/$_GET[server].xml");
+    if (is_file(__DIR__."/cap/$_GET[server].xml")) {
+      unlink(__DIR__."/cap/$_GET[server].xml");
       die("ok");
     }
     die("le fichier n'existe pas");
@@ -380,13 +449,12 @@ switch ($_GET['action'] ?? null) {
   case 'doc': {
     $server = GpfServer::create($_GET['server']);
     if (!isset($_GET['layer'])) {
-      echo "$htmlHeader\n";
-      echo "<pre>"; print_r($server);
+      echo "$htmlHeader<pre>";
+      print_r($server);
       die();
     }
     $layer = $server->layer($_GET['layer']);
     $layer->doc($htmlHeader);
-    die();
   }
   case 'view': {
     $geoapiUrl = ($_SERVER['HTTP_HOST']=='localhost') ? 'http://localhost/geoapi' : 'https://geoapi.fr';
@@ -402,26 +470,23 @@ switch ($_GET['action'] ?? null) {
 ?>
 
 <!DOCTYPE html>
-  <head>
-    <title>carte GPF</title>
-    <meta charset="UTF-8">
+<head>
+  <title>carte GPF</title>
+  <meta charset="UTF-8">
 <!-- meta nécessaire pour le mobile -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <!-- styles nécessaires pour le mobile -->
-    <link rel="stylesheet" href="https://visu.gexplor.fr/viewer.css">
+  <link rel="stylesheet" href="https://visu.gexplor.fr/viewer.css">
 <!-- styles et src de Leaflet -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9/dist/leaflet.js"></script>
-  </head>
-  <body>
-    <div id="map" style="height: 100%; width: 100%"></div>
-    <script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9/dist/leaflet.js"></script>
+</head>
+<body>
+  <div id="map" style="height: 100%; width: 100%"></div>
+  <script>
 var map = L.map('map').setView([48, 3], 8); // view pour la zone
 L.control.scale({position:'bottomleft', metric:true, imperial:false}).addTo(map);
 
-var wmtsurl = 'https://data.geopf.fr/wmts?'
-            + 'service=WMTS&version=1.0.0&request=GetTile&tilematrixSet=PM&height=256&width=256&'
-            + 'tilematrix={z}&tilecol={x}&tilerow={y}';
 var detectRetina = false;
 var geoapiUrl = <?php echo "'$geoapiUrl';\n"; ?>
 var attrIGN = "&copy; <a href='http://www.ign.fr'>IGN</a>";
@@ -433,9 +498,11 @@ var baseLayers = {
      +'&tilematrix={z}&tilecol={x}&tilerow={y}&layer=PLAN-IGN_PNG&format=image/png&style=normal',
     {"format":"image/png","minZoom":0,"maxZoom":19,"detectRetina":false,"attribution":attrIGN}
   ),
-  "Cartes IGN": new L.tileLayer.wms(geoapiUrl+'/gpf/pwms.php',
-    { "version":"1.3.0","layers":"cartesIGN","format":"image/png","transparent":true,
-      "detectRetina":detectRetina, "attribution":attrIGN }
+  "Cartes IGN": new L.tileLayer.wms(
+    geoapiUrl+'/gpf/pwms.php',
+    { "version":"1.3.0","layers":"cartesIGN","format":"image/jpeg","transparent":true,
+      "minZoom":9,"maxZoom":18,"detectRetina":detectRetina, "attribution":attrIGN
+    }
   ),
   "Ortho 20 cm" : new L.tileLayer(
     'https://data.geopf.fr/wmts?service=WMTS&version=1.0.0&request=GetTile&tilematrixSet=PM&height=256&width=256'
@@ -460,6 +527,6 @@ var overlays = {
 <!-- ajout de l outil de sélection de couche -->
 L.control.layers(baseLayers, overlays).addTo(map);
 
-    </script>
-  </body>
+  </script>
+</body>
 </html>

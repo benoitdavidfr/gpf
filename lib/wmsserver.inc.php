@@ -1,5 +1,5 @@
 <?php
-/** définition de la classe abstraite WmsServer
+/** définition de la classe abstraite AbstractWmsServer
  *
  * journal:
  * - 28-31/7/2022:
@@ -17,13 +17,13 @@
 error_reporting(E_ERROR | E_WARNING | E_PARSE | E_NOTICE);
 
 
-/** classe abstraite WmsServer de gestion du dialogue du serveur avec le client
+/** classe abstraite AbstractWmsServer de gestion du dialogue du serveur avec le client
  *
  * Cette classe gère de manière minimum les protocole WMS 1.1.1 et 1.3.0 et fournit qqs méthodes génériques ;
- * elle est indépendante des fonctionnalités du serveur de shomgt.
+ * elle est indépendante des fonctionnalités du serveur
  * Elle génère un fichier temporaire de log utile au déverminage
 */
-abstract class WmsServer {
+abstract class AbstractWmsServer {
   static int $debug=0;
   static string $logfilename = __DIR__.'/wmsserver_logfile.txt'; // nom du fichier de logs par défaut
   
@@ -43,7 +43,7 @@ abstract class WmsServer {
       date(DATE_ATOM)." : $message\n",
       $flag_append|LOCK_EX
     )
-    or die("Erreur d'ecriture dans le fichier de logs dans WmsServer");
+    or die("Erreur d'ecriture dans le fichier de logs dans AbstractWmsServer");
   }
   
   /** Envoi d'une exception WMS
@@ -178,14 +178,14 @@ EOT;
 if (basename(__FILE__)<>basename($_SERVER['PHP_SELF'])) return;
 
 
-/** Test d'utilisation de la classe WmsServer */
-class WmsServerTest extends WmsServer {
+/** Test d'utilisation de la classe AbstractWmsServer */
+class WmsServerTest extends AbstractWmsServer {
   function getCapabilities(string $version=''): never {
-    die("WmsServer::getCapabilities(version=$version)");
+    die("WmsServerTest::getCapabilities(version=$version)");
   }
   
   function getMap(string $version, array $lyrnames, array $styles, array $bbox, string $crs, int $width, int $height, string $format, string $transparent, string $bgcolor): never {
-    die("WmsServer::getMap(version=".$version.", lyrnames=".implode(',',$lyrnames).", bbox=".implode(',',$bbox) 
+    die("WmsServerTest::getMap(version=".$version.", lyrnames=".implode(',',$lyrnames).", bbox=".implode(',',$bbox) 
         .", crs=$crs, width=$width, height=$height, format=$format, transparent=$transparent)");
   }
 };

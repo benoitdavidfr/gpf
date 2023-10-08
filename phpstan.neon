@@ -1,0 +1,9 @@
+parameters:
+  level: 6
+  typeAliases:
+    TPos: list<float>
+  paths:
+    - view.php
+    - pwms.php 
+    - wmsserver.inc.php
+    - sexcept.inc.php
