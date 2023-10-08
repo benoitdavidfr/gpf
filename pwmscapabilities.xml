@@ -84,9 +84,6 @@
       <BoundingBox CRS="EPSG:3857" minx="-30056263" miny="-15538711" maxx="30056263" maxy="15538711"/><!-- Web Mercator -->
       <BoundingBox CRS="EPSG:4326" minx="-80.0" miny="-270.0" maxx="80.0" maxy="270.0"/><!-- WGS84 lat,lon -->
       <BoundingBox CRS="CRS:84" minx="-270.0" miny="-80.0" maxx="270.0" maxy="80.0"/><!-- WGS84 lon,lat -->
-      <Style>
-        <Name>DEFAUT</Name>
-      </Style>
       <Layer queryable="1" opaque="0">
         <Name>cartesIGN</Name>
         <Title>Cartes IGN en fonction de l'échelle</Title>
@@ -99,6 +96,19 @@
             - ScanDépartemental (1/150k) du 1/150k au 1/100k (zoom 12),
             - SCAN100 du 1/100k au 1/50k (zoom 13) et
             - SCAN25 du 1/50k au 1/2k (zooms 14 à 18).
+        </Abstract>
+        <Style>
+          <Name>normal</Name>
+          <Title>Légende générique</Title>
+        </Style>
+        <xMinScaleDenominator>2000</xMinScaleDenominator>
+        <xMaxScaleDenominator>2000000</xMaxScaleDenominator>
+      </Layer>
+      <Layer queryable="1" opaque="0">
+        <Name>debug</Name>
+        <Title>Couche utilisée pour débugger</Title>
+        <Abstract>
+          Retourne systématiquement un message d'erreur avec le dénominateur d'échelle et le niveau de zoom de l'appel.
         </Abstract>
         <Style>
           <Name>normal</Name>

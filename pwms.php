@@ -2,20 +2,12 @@
 /** Implémentation d'un serveur WMS proxy */
 require_once __DIR__.'/lib/sexcept.inc.php';
 require_once __DIR__.'/lib/wmsserver.inc.php';
-
-/** classe regroupant l'intelligence autour du tuilage et des niveaux de zoom */
-class Zoom {
-  /**
-   * Size0 est la circumférence de la Terre en mètres utilisée dans la projection WebMercator
-   *
-   * correspond à 2 * PI * a où a = 6 378 137.0 est le demi-axe majeur de l'ellipsoide WGS 84
-   * Size0 est le côté du carré contenant les points en coordonnées WebMercator */
-  const Size0 = 20037508.3427892476320267 * 2;
-};
+require_once __DIR__.'/lib/zoom.inc.php';
+require_once __DIR__.'/lib/addusforthousand.inc.php';
 
 /** classe implémentant le serveur WMS proxy.
  * La classe ProxyWms hérite de la classe AbstractWmsServer qui gère le protocole WMS.
- * Le script appelle AbstractWmsServer::process() qui appelle les méthodes WmsShomGt::getCapabilities() ou WmsShomGt::getMap()
+ * Le script appelle parent::process() qui appelle les méthodes ProxyWms::getCapabilities() ou ProxyWms::getMap()
 */
 class ProxyWms extends AbstractWmsServer {
   /** méthode GetCapabilities du serveur ProxyWms */
@@ -29,19 +21,17 @@ class ProxyWms extends AbstractWmsServer {
     ));
   }
   
-  /** méthode GetMap du serveur WMS Shomgt.
-  * @param array<int, string> $lyrnames
-  * @param array<int, string> $styles
-  * @param array<int, string> $bbox
-  */
+  /** méthode GetMap du serveur WMS proxy. */
   function getMap(string $version, array $lyrnames, array $styles, array $bbox, string $crs, int $width, int $height, string $format, string $transparent, string $bgcolor): never {
     switch ($lyrnames[0]) {
       case 'cartesIGN': {
-        $scaleDen = round((intval($bbox[2]) - intval($bbox[0])) / ($width * 0.28 * 1e-3));
-        $pxSze = (intval($bbox[2]) - intval($bbox[0])) / $width;
+        $scaleDen = (int)round((floatval($bbox[2]) - floatval($bbox[0])) / ($width * Zoom::STD_RESOLUTION_IN_METERS));
+        $pxSze = (floatval($bbox[2]) - floatval($bbox[0])) / $width;
         $zoom = round(log(Zoom::Size0 / $pxSze / 256, 2));
-        if ($scaleDen > 2_000_000)
-          AbstractWmsServer::exception(400, "Erreur scaleDen=$scaleDen > 2_000_000, zoom=$zoom");
+        if ($scaleDen > 2_000_000) {
+          $scaleDen = addUndescoreForThousand($scaleDen);
+          self::exception(400, "Erreur scaleDen=$scaleDen > 2_000_000, zoom=$zoom");
+        }
         elseif ($scaleDen > 500_000)
           $layer = 'SCAN1000_PYR-JPEG_WLD_WM';
         elseif ($scaleDen > 150_000)
@@ -50,18 +40,19 @@ class ProxyWms extends AbstractWmsServer {
           $layer = 'SCANDEP_PYR-JPEG_FXX_WM'; // 1/150k
         elseif ($scaleDen > 50_000)
           $layer = 'SCAN100_PYR-JPEG_WLD_WM';
-        elseif ($scaleDen < 2_000)
-          AbstractWmsServer::exception(400, "Erreur scaleDen=$scaleDen < 2_000, zoom=$zoom");
+        elseif ($scaleDen < 2_000) {
+          $scaleDen = addUndescoreForThousand($scaleDen);
+          self::exception(400, "Erreur scaleDen=$scaleDen < 2_000, zoom=$zoom");
+        }
         else
           $layer = 'SCAN25TOUR_PYR-JPEG_WLD_WM';
-        parent::log("zoom=$zoom, scaleDen=$scaleDen, layer=$layer");
         $url = 'https://data.geopf.fr/wms-r/wms'
               ."?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&layers=$layer&STYLES="
               ."&CRS=$crs&BBOX=".implode(',', $bbox)
               ."&width=$width&height=$height"
               ."&format=$format&transparent=$transparent";
         if (($image = file_get_contents($url)) === false)
-          AbstractWmsServer::exception(500, "Erreur de lecture de https://data.geopf.fr/wms-r/wms");
+          self::exception(500, "Erreur de lecture de https://data.geopf.fr/wms-r/wms");
         switch ($format) {
           case 'image/png': {
             header('Content-type: image/png');
@@ -76,7 +67,12 @@ class ProxyWms extends AbstractWmsServer {
         die ($image);
       }
       case 'debug': {
-        
+        $scaleDen = (int)round((floatval($bbox[2]) - floatval($bbox[0])) / ($width * Zoom::STD_RESOLUTION_IN_METERS));
+        $scaleDen = addUndescoreForThousand($scaleDen);
+        $pxSze = (floatval($bbox[2]) - floatval($bbox[0])) / $width;
+        $zoom = round(log(Zoom::Size0 / $pxSze / 256, 2));
+        self::log("zoom=$zoom, scaleDen=$scaleDen");
+        self::exception(400, "zoom=$zoom, scaleDen=$scaleDen");
       }
     }
     die();

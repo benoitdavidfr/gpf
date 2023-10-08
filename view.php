@@ -1,33 +1,7 @@
 <?php
 /** Visualiser avec Leaflet les couches WMS, WMTS et TMS de la géoplateforme */
+require_once __DIR__.'/lib/zoom.inc.php';
 require_once __DIR__.'/lib/addusforthousand.inc.php';
-
-/** classe regroupant l'intelligence autour du tuilage et des niveaux de zoom */
-class Zoom {
-  /**
-   * Size0 est la circumférence de la Terre en mètres utilisée dans la projection WebMercator
-   *
-   * correspond à 2 * PI * a où a = 6 378 137.0 est le demi-axe majeur de l'ellipsoide WGS 84
-   * Size0 est le côté du carré contenant les points en coordonnées WebMercator */
-  const Size0 = 20037508.3427892476320267 * 2;
-
-  /** Résolution  standard définie par WMS = 0,28 mm soit 2.8e-4 mètres */
-  const STD_RESOLUTION = 2.8e-4;
-  
-  /** Conversion d'un dénominateur d'échelle en niveau de zoom.
-   *
-   * self::STD_RESOLUTION est la taille d'un pixel sur la carte
-   * ($scaleDen * self::STD_RESOLUTION) donne la taille d'un pixel sur le terrain
-   * ($scaleDen * self::STD_RESOLUTION * 256) donne la taille sur le terrain d'une tuile de largeur 256 pixels
-   */
-  static function zoomFromScaleDen(float $scaleDen): float {
-    return log(Zoom::Size0 / ($scaleDen * self::STD_RESOLUTION * 256), 2);
-  }
-  
-  static function scaleDenFromZoom(float $zoom): float {
-    return Zoom::Size0 / (2 ** $zoom * self::STD_RESOLUTION * 256);
-  }
-};
 
 /** classe abstraite d'un serveur GPF */
 readonly abstract class GpfServer {
