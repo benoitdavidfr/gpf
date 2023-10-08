@@ -208,6 +208,7 @@ readonly class WmsLayer extends WxsLayer {
     return $styles;
   }
   
+  /** Déduit le niveau de zoom min à partir du MaxScaleDenominator des capacités */
   private function minZoom(): int {
     //echo "<pre>cap="; print_r($this->cap);
     if (!$this->cap->MaxScaleDenominator)
@@ -216,10 +217,11 @@ readonly class WmsLayer extends WxsLayer {
     $maxScaleDen = (float)$this->cap->MaxScaleDenominator;
     //echo "minScaleDen=$minScaleDen, maxScaleDen=$maxScaleDen\n";
     //echo "minZoom=",Zoom::zoomFromScaleDen($maxScaleDen),", maxZoom=",Zoom::zoomFromScaleDen($minScaleDen),"\n";
-    return ceil(Zoom::zoomFromScaleDen($maxScaleDen));
+    return (int)ceil(Zoom::zoomFromScaleDen($maxScaleDen));
   }
   
-  function maxZoom(): int {
+  /** Déduit le niveau de zoom max à partir du MinScaleDenominator des capacités */
+  private function maxZoom(): int {
     //echo "<pre>cap="; print_r($this->cap);
     if (!$this->cap->MinScaleDenominator)
       return -1;
@@ -227,7 +229,7 @@ readonly class WmsLayer extends WxsLayer {
     //$maxScaleDen = (float)$this->cap->MaxScaleDenominator;
     //echo "minScaleDen=$minScaleDen, maxScaleDen=$maxScaleDen\n";
     //echo "minZoom=",Zoom::zoomFromScaleDen($maxScaleDen),", maxZoom=",Zoom::zoomFromScaleDen($minScaleDen),"\n";
-    return floor(Zoom::zoomFromScaleDen($minScaleDen));
+    return (int)floor(Zoom::zoomFromScaleDen($minScaleDen));
   }
   
   function leafletCode(string $styleName=null): string {
@@ -403,7 +405,8 @@ switch ($_GET['action'] ?? null) {
     echo "$htmlHeader<h2>Correspondance entre niveau de zoom et dénominateur d'échelle</h2>\n";
     echo "<table border=1>";
     for ($zoom=0; $zoom <= 20; $zoom++) {
-      echo "<tr><td>$zoom</td><td align='right'>",addUndescoreForThousand(round(Zoom::scaleDenFromZoom($zoom))),"</td></tr>\n";
+      echo "<tr><td>$zoom</td>",
+           "<td align='right'>",addUndescoreForThousand((int)round(Zoom::scaleDenFromZoom($zoom))),"</td></tr>\n";
     }
     echo "</table>\n";
     die();
