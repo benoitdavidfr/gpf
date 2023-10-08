@@ -5,5 +5,4 @@ parameters:
   paths:
     - view.php
     - pwms.php 
-    - wmsserver.inc.php
-    - sexcept.inc.php
+    - lib
